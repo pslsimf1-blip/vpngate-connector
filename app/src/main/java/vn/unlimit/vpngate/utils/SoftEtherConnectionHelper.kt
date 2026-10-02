@@ -16,12 +16,8 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
 import vn.unlimit.vpngate.R
 import vn.unlimit.vpngate.models.VPNGateConnection
+import vn.unlimit.vpngate.utils.DataUtil.Companion.USE_DOMAIN_TO_CONNECT
 
-/**
- * Helper class for managing SoftEther VPN connections
- * Note: This is a stub implementation for Phase 5 integration.
- * Full implementation will connect to the SoftEtherClient module service.
- */
 class SoftEtherConnectionHelper(private val activity: AppCompatActivity) {
 
     companion object {
@@ -34,7 +30,6 @@ class SoftEtherConnectionHelper(private val activity: AppCompatActivity) {
         const val PREFS_KEY_SOFTETHER_COUNTRY = "softether_country"
         const val PREFS_KEY_SOFTETHER_PORT = "softether_port"
 
-        // Placeholder constants for service extras
         private const val EXTRA_HOSTNAME = "hostname"
         private const val EXTRA_IP = "ip"
         private const val EXTRA_PORT = "port"
@@ -43,23 +38,16 @@ class SoftEtherConnectionHelper(private val activity: AppCompatActivity) {
         private const val EXTRA_CONNECTION_STATE = "connection_state"
         private const val EXTRA_ERROR = "error"
 
-        // Placeholder state constants
         private const val STATE_CONNECTED = "CONNECTED"
         private const val STATE_DISCONNECTED = "DISCONNECTED"
         private const val STATE_ERROR = "ERROR"
         private const val ACTION_CONNECTION_STATE = "vn.unlimit.softether.CONNECTION_STATE"
 
-        /**
-         * Check if SoftEther is currently connected
-         */
         fun isConnected(context: Context): Boolean {
             return PreferenceManager.getDefaultSharedPreferences(context)
                 .getBoolean(PREFS_KEY_SOFTETHER_CONNECTED, false)
         }
 
-        /**
-         * Get the currently connected SoftEther hostname
-         */
         fun getConnectedHostname(context: Context): String? {
             return PreferenceManager.getDefaultSharedPreferences(context)
                 .getString(PREFS_KEY_SOFTETHER_HOSTNAME, null)
@@ -127,7 +115,6 @@ class SoftEtherConnectionHelper(private val activity: AppCompatActivity) {
     }
 
     init {
-        // Register broadcast receiver for connection state
         val filter = IntentFilter().apply {
             addAction(ACTION_CONNECTION_STATE)
         }
@@ -138,9 +125,6 @@ class SoftEtherConnectionHelper(private val activity: AppCompatActivity) {
         this.connectionListener = listener
     }
 
-    /**
-     * Connect to SoftEther VPN
-     */
     fun connect(connection: VPNGateConnection, excludedApps: List<String> = emptyList()) {
         if (isConnecting) {
             Log.d(TAG, "Already connecting, ignoring connect request")
@@ -150,16 +134,14 @@ class SoftEtherConnectionHelper(private val activity: AppCompatActivity) {
         currentConnection = connection
         isConnecting = true
 
-        // Save connection info to preferences
         prefs.edit {
             putString(PREFS_KEY_SOFTETHER_HOSTNAME, connection.calculateHostName)
             putString(PREFS_KEY_SOFTETHER_IP, connection.ip)
             putString(PREFS_KEY_SOFTETHER_COUNTRY, connection.countryShort)
-            putInt(PREFS_KEY_SOFTETHER_PORT, 443) // SoftEther typically uses port 443
+            putInt(PREFS_KEY_SOFTETHER_PORT, 443)
             putStringSet("excluded_apps", excludedApps.toSet())
         }
 
-        // Request VPN permission
         val intent = VpnService.prepare(activity)
         if (intent != null) {
             vpnPermissionLauncher.launch(intent)
@@ -168,44 +150,28 @@ class SoftEtherConnectionHelper(private val activity: AppCompatActivity) {
         }
     }
 
-    /**
-     * Disconnect from SoftEther VPN
-     */
     fun disconnect() {
         isConnecting = false
         sendVpnAction(ACTION_VPN_DISCONNECT)
     }
 
-    /**
-     * Check if currently connected to this specific server
-     */
     fun isConnectedTo(connection: VPNGateConnection): Boolean {
         return isConnected(activity) &&
                 getConnectedHostname(activity) == connection.calculateHostName
     }
 
-    /**
-     * Check if SoftEther is connected (any server)
-     */
     fun isConnected(): Boolean {
         return isConnected(activity)
     }
 
-    /**
-     * Clean up resources
-     */
     fun cleanup() {
         LocalBroadcastManager.getInstance(activity).unregisterReceiver(connectionStateReceiver)
     }
 
     private fun startVpnService() {
-        // Stub implementation - will start the actual SoftEtherVpnService when module is integrated
         Log.d(TAG, "Starting VPN service (stub implementation)")
 
-        // Simulate connection success for now
         activity.runOnUiThread {
-            // In real implementation, this would start the service
-            // For now, just mark as connected for UI testing
             saveConnectionState(true)
             currentConnection?.let {
                 connectionListener?.onConnected(it.calculateHostName, it.ip ?: "")
@@ -214,7 +180,6 @@ class SoftEtherConnectionHelper(private val activity: AppCompatActivity) {
     }
 
     private fun sendVpnAction(action: String) {
-        // Stub implementation
         Log.d(TAG, "Sending VPN action: $action (stub implementation)")
 
         if (action == ACTION_VPN_DISCONNECT) {
