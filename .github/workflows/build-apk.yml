@@ -56,6 +56,28 @@ jobs:
           }
           EOF
 
+      - name: Fix OpenSSL configuration.h
+        run: |
+          # Создаём минимальный configuration.h — файл должен генерироваться при
+          # сборке OpenSSL, но в исходниках проекта его нет
+          OPENSSL_INC="SoftEtherClient/src/main/cpp/openssl/include/openssl"
+          cat > "$OPENSSL_INC/configuration.h" << 'EOF'
+          #ifndef OSSL_CONFIGURATION_H
+          # define OSSL_CONFIGURATION_H
+          # pragma once
+
+          # define OPENSSL_API_COMPAT 0x30000000L
+          # define OPENSSL_CONFIGURED_API 30000L
+          # define OPENSSL_NO_DEPRECATED
+
+          # define SIXTY_FOUR_BIT_LONG
+          # define RC4_INT unsigned int
+
+          #endif
+          EOF
+          echo "Created configuration.h:"
+          ls -la "$OPENSSL_INC/configuration.h"
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
