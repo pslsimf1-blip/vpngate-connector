@@ -221,12 +221,8 @@ class DataUtil(context: Context?) {
         editor.apply()
     }
 
+    // Реклама отключена полностью, чтобы не мешала работе приложения.
     fun hasAds(): Boolean {
-        try {
-            return this.isAcceptedPrivacyPolicy && (BuildConfig.FLAVOR == "free") && (adMobId != null)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
         return false
     }
 
