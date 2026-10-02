@@ -20,19 +20,46 @@ jobs:
           git config --global url."https://github.com/".insteadOf "git@github.com:"
           git submodule sync --recursive
           git submodule update --init --recursive
-          echo "=== Диагностика OpenSSL include ==="
-          OPENSSL_INC="SoftEtherClient/src/main/cpp/openssl/include/openssl"
-          ls -la "$OPENSSL_INC/" | grep -E "opensslv|macros|aes|evp" || true
-          echo "=== Ищу opensslv.h.in ==="
-          find "SoftEtherClient/src/main/cpp/openssl" -name "opensslv*" -type f 2>/dev/null || true
-          echo "=== Корень openssl ==="
-          ls -la "SoftEtherClient/src/main/cpp/openssl/" 2>/dev/null || echo "папка не найдена"
+          echo "=== Подмодули скачаны ==="
+          ls SoftEtherClient/src/main/cpp/openssl/ | head
+          echo "=== Файлы в openssl/include/openssl ==="
+          ls SoftEtherClient/src/main/cpp/openssl/include/openssl/ | head -20 || true
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      - name: Install Perl (needed by OpenSSL Configure)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq perl
+
+      - name: Inspect ABI configuration (diagnostic)
+        run: |
+          echo "=== app/build.gradle abiFilters ==="
+          grep -B2 -A10 "abiFilters" app/build.gradle* 2>/dev/null || echo "нет abiFilters в app/"
+          echo "=== SoftEtherClient/build.gradle abiFilters ==="
+          grep -B2 -A10 "abiFilters" SoftEtherClient/build.gradle* 2>/dev/null || echo "нет abiFilters в SoftEtherClient/"
+
+      - name: Build OpenSSL for ARM ABIs
+        run: |
+          set -e
+          export ANDROID_NDK_ROOT=$(ls -d /usr/local/lib/android/sdk/ndk/*/ | head -1 | sed 's:/$::')
+          echo "NDK: $ANDROID_NDK_ROOT"
+          export ANDROID_API=23
+          cd SoftEtherClient/src/main/cpp
+          chmod +x build-openssl-android.sh
+          # Собираем только ARM-архитектуры — они нужны для реальных телефонов.
+          # x86 нужны только эмуляторам; если понадобятся — добавим позже.
+          ./build-openssl-android.sh arm64-v8a
+          ./build-openssl-android.sh armeabi-v7a
+          echo "=== Итог: библиотеки в jniLibs ==="
+          ls -la ../jniLibs/arm64-v8a/ || true
+          ls -la ../jniLibs/armeabi-v7a/ || true
+          echo "=== Итог: заголовки OpenSSL ==="
+          ls openssl/include/openssl/ | grep -E "opensslv|configuration|safestack" || true
 
       - name: Create dummy google-services.json
         run: |
@@ -67,63 +94,6 @@ jobs:
             "configuration_version": "1"
           }
           EOF
-
-      - name: Fix OpenSSL headers (configuration.h + opensslv.h)
-        run: |
-          OPENSSL_INC="SoftEtherClient/src/main/cpp/openssl/include/openssl"
-
-          # configuration.h
-          if [ ! -f "$OPENSSL_INC/configuration.h" ]; then
-            cat > "$OPENSSL_INC/configuration.h" << 'EOF'
-          #ifndef OSSL_CONFIGURATION_H
-          # define OSSL_CONFIGURATION_H
-          # pragma once
-
-          # define OPENSSL_API_COMPAT 0x30000000L
-          # define OPENSSL_CONFIGURED_API 30000L
-          # define OPENSSL_NO_DEPRECATED
-
-          # define SIXTY_FOUR_BIT_LONG
-          # define RC4_INT unsigned int
-
-          #endif
-          EOF
-            echo "Создан configuration.h"
-          fi
-
-          # opensslv.h — заглушка версии
-          if [ ! -f "$OPENSSL_INC/opensslv.h" ]; then
-            # Если есть шаблон opensslv.h.in, копируем его
-            if [ -f "$OPENSSL_INC/opensslv.h.in" ]; then
-              cp "$OPENSSL_INC/opensslv.h.in" "$OPENSSL_INC/opensslv.h"
-              echo "Скопирован opensslv.h из шаблона"
-            else
-              # Иначе создаём минимальную заглушку
-              cat > "$OPENSSL_INC/opensslv.h" << 'EOF'
-          #ifndef HEADER_OPENSSLV_H
-          # define HEADER_OPENSSLV_H
-
-          # define OPENSSL_VERSION_NUMBER 0x30000000L
-          # define OPENSSL_VERSION_TEXT "OpenSSL 3.0.0 (stub for Android build)"
-          # define OPENSSL_VERSION_MAJOR 3
-          # define OPENSSL_VERSION_MINOR 0
-          # define OPENSSL_VERSION_PATCH 0
-
-          # define OPENSSL_FULL_VERSION_STR "3.0.0"
-          # define OPENSSL_VERSION_PRE_RELEASE ""
-          # define OPENSSL_VERSION_BUILD_METADATA ""
-
-          # define OPENSSL_VERSION_STR "3.0.0"
-          # define OPENSSL_FULL_VERSION_STR "3.0.0"
-
-          #endif
-          EOF
-              echo "Создан opensslv.h (заглушка)"
-            fi
-          fi
-
-          echo "=== Итог ==="
-          ls -la "$OPENSSL_INC/" | grep -E "opensslv|configuration"
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
