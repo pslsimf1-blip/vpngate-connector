@@ -1,0 +1,40 @@
+name: Refresh VPN Gate servers list
+
+on:
+  schedule:
+    # Каждый час
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch CSV from vpngate.net
+        run: |
+          curl -fsSL "https://www.vpngate.net/api/iphone/" -o vpngate.csv || true
+          if [ ! -s vpngate.csv ]; then
+            echo "Не удалось скачать CSV"
+            exit 1
+          fi
+          echo "Скачано строк: $(wc -l < vpngate.csv)"
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add vpngate.csv
+          if git diff --staged --quiet; then
+            echo "Ничего не изменилось"
+          else
+            git commit -m "Auto-refresh vpngate.csv"
+            git push
+          fi
