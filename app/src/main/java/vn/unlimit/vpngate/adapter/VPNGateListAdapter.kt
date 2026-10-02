@@ -2,6 +2,7 @@ package vn.unlimit.vpngate.adapter
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -28,9 +29,6 @@ import vn.unlimit.vpngate.customview.ThreadSafeNativeAdView
 import vn.unlimit.vpngate.models.VPNGateConnectionList
 import vn.unlimit.vpngate.utils.DataUtil
 
-/**
- * Created by hoangnd on 1/29/2018.
- */
 class VPNGateListAdapter(private val mContext: Context) :
     RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private val _list = VPNGateConnectionList()
@@ -42,6 +40,9 @@ class VPNGateListAdapter(private val mContext: Context) :
     private var nativeAd: NativeAd? = null
     private var hasAds: Boolean = false
     private var adUnitId: String? = null
+
+    // НОВОЕ: множество hostName серверов, помеченных сканером как проверенные
+    private var verifiedHosts: Set<String> = emptySet()
 
     @SuppressLint("NotifyDataSetChanged")
     fun initialize(vpnGateConnectionList: VPNGateConnectionList?) {
@@ -55,6 +56,16 @@ class VPNGateListAdapter(private val mContext: Context) :
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    /**
+     * НОВОЕ: устанавливает список hostName, у которых isVerified = true.
+     * Вызывается из HomeFragment после чтения из БД.
+     */
+    @SuppressLint("NotifyDataSetChanged")
+    fun setVerifiedHosts(hosts: Set<String>) {
+        this.verifiedHosts = hosts
+        notifyDataSetChanged()
     }
 
     fun setOnItemClickListener(inOnItemClickListener: OnItemClickListener?) {
@@ -79,16 +90,11 @@ class VPNGateListAdapter(private val mContext: Context) :
 
     private fun shouldShowAdAt(position: Int): Boolean {
         if (!hasAds || adUnitId == null) return false
-        // First ad at position 2 (after 2 VPN items), then every 3 VPN items after that
-        // Positions: 0=VPN, 1=VPN, 2=Ad, 3=VPN, 4=VPN, 5=VPN, 6=Ad, 7=VPN, 8=VPN, 9=VPN, 10=Ad, etc.
         return position > 0 && position % AD_INTERVAL == 2
     }
 
     private fun getRealPosition(position: Int): Int {
         if (!hasAds || adUnitId == null) return position
-        // Calculate the actual data position accounting for ad positions
-        // Ads are at positions 2, 6, 10, 14... (every 4th position starting from 2)
-        // Subtract the number of ads that appear before this position: (position + 2) / 4
         return position - ((position + 2) / AD_INTERVAL)
     }
 
@@ -107,7 +113,6 @@ class VPNGateListAdapter(private val mContext: Context) :
                 }
 
                 override fun onCustomNativeAdLoaded(customNativeAd: com.google.android.libraries.ads.mobile.sdk.nativead.CustomNativeAd) {
-                    // Not used
                 }
 
                 override fun onAdFailedToLoad(adError: LoadAdError) {
@@ -118,13 +123,11 @@ class VPNGateListAdapter(private val mContext: Context) :
     }
 
     private fun populateNativeAdView(nativeAd: NativeAd, adViewHolder: VHTypeAd) {
-        // Hide loading container and show ad view
         adViewHolder.adLoadingContainer.visibility = View.GONE
         adViewHolder.nativeAdWrapper.visibility = View.VISIBLE
 
         val adWrapper = adViewHolder.nativeAdWrapper
 
-        // Set other ad assets via wrapper delegates
         adWrapper.setHeadlineView(adViewHolder.adHeadline)
         adWrapper.setBodyView(adViewHolder.adBody)
         adWrapper.setCallToActionView(adViewHolder.adCallToAction)
@@ -134,11 +137,9 @@ class VPNGateListAdapter(private val mContext: Context) :
         adWrapper.setStoreView(adViewHolder.adStore)
         adWrapper.setAdvertiserView(adViewHolder.adAdvertiser)
 
-        // Populate the headline
         adViewHolder.adHeadline.text = nativeAd.headline
         adViewHolder.adHeadline.visibility = if (nativeAd.headline != null) View.VISIBLE else View.GONE
 
-        // Populate the media view
         if (nativeAd.mediaContent != null) {
             adViewHolder.adMedia.mediaContent = nativeAd.mediaContent
             adViewHolder.adMedia.visibility = View.VISIBLE
@@ -146,7 +147,6 @@ class VPNGateListAdapter(private val mContext: Context) :
             adViewHolder.adMedia.visibility = View.GONE
         }
 
-        // Populate the body
         if (nativeAd.body != null) {
             adViewHolder.adBody.text = nativeAd.body
             adViewHolder.adBody.visibility = View.VISIBLE
@@ -154,7 +154,6 @@ class VPNGateListAdapter(private val mContext: Context) :
             adViewHolder.adBody.visibility = View.GONE
         }
 
-        // Populate the call to action
         if (nativeAd.callToAction != null) {
             adViewHolder.adCallToAction.text = nativeAd.callToAction
             adViewHolder.adCallToAction.visibility = View.VISIBLE
@@ -162,7 +161,6 @@ class VPNGateListAdapter(private val mContext: Context) :
             adViewHolder.adCallToAction.visibility = View.GONE
         }
 
-        // Populate the icon
         if (nativeAd.icon != null) {
             adViewHolder.adAppIcon.setImageDrawable(nativeAd.icon!!.drawable)
             adViewHolder.adAppIcon.visibility = View.VISIBLE
@@ -170,7 +168,6 @@ class VPNGateListAdapter(private val mContext: Context) :
             adViewHolder.adAppIcon.visibility = View.GONE
         }
 
-        // Populate the price
         if (nativeAd.price != null) {
             adViewHolder.adPrice.text = nativeAd.price
             adViewHolder.adPrice.visibility = View.VISIBLE
@@ -178,7 +175,6 @@ class VPNGateListAdapter(private val mContext: Context) :
             adViewHolder.adPrice.visibility = View.GONE
         }
 
-        // Populate the star rating
         if (nativeAd.starRating != null) {
             adViewHolder.adStars.rating = nativeAd.starRating!!.toFloat()
             adViewHolder.adStars.visibility = View.VISIBLE
@@ -186,7 +182,6 @@ class VPNGateListAdapter(private val mContext: Context) :
             adViewHolder.adStars.visibility = View.GONE
         }
 
-        // Populate the store
         if (nativeAd.store != null) {
             adViewHolder.adStore.text = nativeAd.store
             adViewHolder.adStore.visibility = View.VISIBLE
@@ -194,7 +189,6 @@ class VPNGateListAdapter(private val mContext: Context) :
             adViewHolder.adStore.visibility = View.GONE
         }
 
-        // Populate the advertiser
         if (nativeAd.advertiser != null) {
             adViewHolder.adAdvertiser.text = nativeAd.advertiser
             adViewHolder.adAdvertiser.visibility = View.VISIBLE
@@ -202,7 +196,6 @@ class VPNGateListAdapter(private val mContext: Context) :
             adViewHolder.adAdvertiser.visibility = View.GONE
         }
 
-        // Register the native ad view via wrapper
         adWrapper.registerNativeAd(nativeAd, adViewHolder.adMedia)
     }
 
@@ -237,7 +230,6 @@ class VPNGateListAdapter(private val mContext: Context) :
         if (!hasAds || adUnitId == null || itemCount == 0) {
             return itemCount
         }
-        // Add ad positions (every 3 items means 1 ad for every 3 data items)
         return itemCount + (itemCount / AD_INTERVAL)
     }
 
@@ -288,7 +280,18 @@ class VPNGateListAdapter(private val mContext: Context) :
                     .into(imgFlag)
                 txtCountry.text = vpnGateConnection.countryLong
                 txtIp.text = vpnGateConnection.ip
-                txtHostname.text = vpnGateConnection.calculateHostName
+
+                // НОВОЕ: подсветка проверенных серверов зелёной галочкой
+                val isVerified = vpnGateConnection.hostName != null &&
+                        verifiedHosts.contains(vpnGateConnection.hostName)
+                if (isVerified) {
+                    txtHostname.text = "✓ " + vpnGateConnection.calculateHostName
+                    txtHostname.setTextColor(Color.parseColor("#4CAF50")) // зелёный Material
+                } else {
+                    txtHostname.text = vpnGateConnection.calculateHostName
+                    txtHostname.setTextColor(itemView.context.getColor(android.R.color.primary_text_light))
+                }
+
                 txtScore.text = vpnGateConnection.scoreAsString
                 txtUptime.text = vpnGateConnection.getCalculateUpTime(mContext)
                 txtSpeed.text = vpnGateConnection.calculateSpeed
@@ -364,6 +367,6 @@ class VPNGateListAdapter(private val mContext: Context) :
         private const val TYPE_NORMAL = 100000
         private const val TYPE_AD = 100001
         private const val TAG = "VPNGateListAdapter"
-        private const val AD_INTERVAL = 4 // Show ad after every 3 VPN items (every 4th position: 3, 7, 11...)
+        private const val AD_INTERVAL = 4
     }
 }

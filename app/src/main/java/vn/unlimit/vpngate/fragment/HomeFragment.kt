@@ -9,8 +9,8 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout.OnRefreshListener
@@ -40,11 +40,9 @@ import vn.unlimit.vpngate.models.VPNGateConnection
 import vn.unlimit.vpngate.models.VPNGateConnectionList
 import vn.unlimit.vpngate.provider.BaseProvider
 import vn.unlimit.vpngate.utils.DataUtil
+import vn.unlimit.vpngate.utils.ServerScanner
 import vn.unlimit.vpngate.viewmodels.ConnectionListViewModel
 
-/**
- * Created by hoangnd on 1/30/2018.
- */
 class HomeFragment : Fragment(), OnRefreshListener, View.OnClickListener, OnItemClickListener,
     OnItemLongClickListener, OnScrollListener {
     companion object {
@@ -61,10 +59,45 @@ class HomeFragment : Fragment(), OnRefreshListener, View.OnClickListener, OnItem
     private var mActivity: MainActivity? = null
     private var interstitialAd: InterstitialAd? = null
 
-    //Flag ads is showed need request new ad
     private var isShowedAd = true
     private lateinit var binding: FragmentHomeBinding
     private var adInitRunnable: Runnable? = null
+
+    // НОВОЕ: множество hostName проверенных серверов, полученных из БД
+    private val verifiedHosts: MutableSet<String> = mutableSetOf()
+
+    // НОВОЕ: слушатель событий сканера — обновляет UI во время сканирования
+    private val scanListener = object : ServerScanner.ScanListener {
+        override fun onScanStarted(total: Int) {
+            Log.i(TAG, "Scan started: $total servers")
+            updateScanButton("Сканирование… 0/$total", enabled = false)
+        }
+
+        override fun onScanProgress(current: Int, total: Int, serverName: String, success: Boolean) {
+            updateScanButton("Сканирование… $current/$total", enabled = false)
+        }
+
+        override fun onScanComplete(verifiedCount: Int) {
+            Log.i(TAG, "Scan complete. Verified: $verifiedCount")
+            updateScanButton("Сканировать", enabled = true)
+            Toast.makeText(mContext, "Проверено серверов: $verifiedCount", Toast.LENGTH_LONG).show()
+            // Перечитываем список проверенных и обновляем адаптер
+            loadVerifiedHosts()
+        }
+
+        override fun onScanStopped(verifiedCount: Int) {
+            Log.i(TAG, "Scan stopped. Verified: $verifiedCount")
+            updateScanButton("Сканировать", enabled = true)
+            Toast.makeText(mContext, "Сканирование остановлено. Проверено: $verifiedCount", Toast.LENGTH_LONG).show()
+            loadVerifiedHosts()
+        }
+
+        override fun onScanError(message: String) {
+            Log.e(TAG, "Scan error: $message")
+            updateScanButton("Сканировать", enabled = true)
+            Toast.makeText(mContext, message, Toast.LENGTH_LONG).show()
+        }
+    }
 
     override fun onResume() {
         super.onResume()
@@ -111,7 +144,6 @@ class HomeFragment : Fragment(), OnRefreshListener, View.OnClickListener, OnItem
                     }
 
                     override fun onAdFailedToShowFullScreenContent(fullScreenContentError: FullScreenContentError) {
-                        // Called when fullscreen content failed to show.
                         startDetailAct(vpnGateConnection)
                     }
                 }
@@ -131,6 +163,8 @@ class HomeFragment : Fragment(), OnRefreshListener, View.OnClickListener, OnItem
     override fun onDestroy() {
         super.onDestroy()
         adInitRunnable?.let { App.cancelPendingCallbacks(it) }
+        // НОВОЕ: отписываемся от сканера при уничтожении фрагмента
+        ServerScanner.setListener(null)
     }
 
     override fun onCreate(savedBundle: Bundle?) {
@@ -138,7 +172,7 @@ class HomeFragment : Fragment(), OnRefreshListener, View.OnClickListener, OnItem
         try {
             dataUtil = instance!!.dataUtil
             vpnGateListAdapter = VPNGateListAdapter(mContext!!)
-            val showNativeAd = dataUtil!!.hasAds() && 
+            val showNativeAd = dataUtil!!.hasAds() &&
                 FirebaseRemoteConfig.getInstance().getBoolean(getString(R.string.cfg_show_native_ad))
             vpnGateListAdapter!!.setHasAds(showNativeAd)
             vpnGateListAdapter!!.setAdUnitId(getString(R.string.admob_native_unit_id))
@@ -177,6 +211,8 @@ class HomeFragment : Fragment(), OnRefreshListener, View.OnClickListener, OnItem
         vpnGateListAdapter!!.setOnItemLongClickListener(this)
         vpnGateListAdapter!!.setOnScrollListener(this)
         binding.btnToTop.setOnClickListener(this)
+        // НОВОЕ: обработчик кнопки "Сканировать"
+        binding.btnScan.setOnClickListener(this)
         return binding.root
     }
 
@@ -195,6 +231,52 @@ class HomeFragment : Fragment(), OnRefreshListener, View.OnClickListener, OnItem
                 vpnGateListAdapter!!.initialize(mActivity!!.vpnGateConnectionList)
                 updateEmptyState(listSize)
             }
+        }
+        // НОВОЕ: загружаем проверенные хосты из БД при старте
+        loadVerifiedHosts()
+    }
+
+    /**
+     * НОВОЕ: читает из БД серверы с isVerified = true и передаёт в адаптер.
+     */
+    private fun loadVerifiedHosts() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val verifiedItems = instance!!.vpnGateItemDao.getVerified()
+                val hosts = verifiedItems.map { it.hostName }.toSet()
+                withContext(Dispatchers.Main) {
+                    verifiedHosts.clear()
+                    verifiedHosts.addAll(hosts)
+                    vpnGateListAdapter?.setVerifiedHosts(verifiedHosts)
+                    Log.i(TAG, "Loaded ${hosts.size} verified hosts")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "loadVerifiedHosts error", e)
+            }
+        }
+    }
+
+    /**
+     * НОВОЕ: обновляет текст и активность кнопки сканирования.
+     */
+    private fun updateScanButton(text: String, enabled: Boolean) {
+        try {
+            binding.btnScan.text = text
+            binding.btnScan.isEnabled = enabled
+        } catch (e: Exception) {
+            Log.e(TAG, "updateScanButton error", e)
+        }
+    }
+
+    /**
+     * НОВОЕ: обработчик нажатия на кнопку сканирования.
+     */
+    private fun toggleScan() {
+        if (ServerScanner.isScanning()) {
+            ServerScanner.stopScan(requireContext())
+        } else {
+            ServerScanner.setListener(scanListener)
+            ServerScanner.startScan(requireContext())
         }
     }
 
@@ -219,11 +301,6 @@ class HomeFragment : Fragment(), OnRefreshListener, View.OnClickListener, OnItem
         }
     }
 
-    /**
-     * Search by keyword
-     *
-     * @param keyword search keyword
-     */
     fun filter(keyword: String) {
         stopTask()
         if (mActivity!!.vpnGateConnectionList == null) {
@@ -290,9 +367,6 @@ class HomeFragment : Fragment(), OnRefreshListener, View.OnClickListener, OnItem
         binding.lnSwipeRefresh.isRefreshing = false
     }
 
-    /**
-     * Close search
-     */
     fun closeSearch() {
         isSearching = false
         if (mActivity!!.vpnGateConnectionList != null) {
@@ -316,8 +390,9 @@ class HomeFragment : Fragment(), OnRefreshListener, View.OnClickListener, OnItem
     }
 
     override fun onClick(view: View) {
-        if (view == binding.btnToTop) {
-            binding.rcvConnection.smoothScrollToPosition(0)
+        when (view.id) {
+            R.id.btn_to_top -> binding.rcvConnection.smoothScrollToPosition(0)
+            R.id.btn_scan -> toggleScan()
         }
     }
 
@@ -389,6 +464,8 @@ class HomeFragment : Fragment(), OnRefreshListener, View.OnClickListener, OnItem
                 vpnGateListAdapter!!.initialize(vpnGateConnectionList)
                 updateEmptyState(listSize)
                 binding.lnSwipeRefresh.isRefreshing = false
+                // После загрузки списка — переприменяем галочки проверенных
+                vpnGateListAdapter?.setVerifiedHosts(verifiedHosts)
             }
         }
     }

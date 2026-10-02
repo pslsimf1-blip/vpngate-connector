@@ -26,7 +26,9 @@ data class VPNGateItem(
     @ColumnInfo val isL2TPSupport: Boolean = false,
     @ColumnInfo val isSSTPSupport: Boolean = false,
     @ColumnInfo val seTcpPort: Int = 0,
-    @ColumnInfo val seUdpPort: Int = 0
+    @ColumnInfo val seUdpPort: Int = 0,
+    // НОВОЕ ПОЛЕ: помечает серверы, которые были проверены сканером и успешно подключились
+    @ColumnInfo val isVerified: Boolean = false
 ) {
     val isUdpOnly: Boolean
         get() = seTcpPort <= 0 && seUdpPort > 0
