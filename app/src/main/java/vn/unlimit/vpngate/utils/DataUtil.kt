@@ -58,11 +58,6 @@ class DataUtil(context: Context?) {
     }
 
     var connectionsCache: VPNGateConnectionList?
-        /**
-         * Get connection cache
-         *
-         * @return VPNGateConnectionList
-         */
         get() {
             try {
                 Log.d(TAG, "get connectionsCache")
@@ -90,15 +85,10 @@ class DataUtil(context: Context?) {
             }
             return null
         }
-        /**
-         * Set connection cache
-         *
-         */
         set(_) {
             try {
                 val cache = Cache()
                 val calendar = Calendar.getInstance()
-                //Cache in minute get from setting
                 val cacheTime = intArrayOf(15, 30, 60, 120, 240, 480, 960)
                 val minute = cacheTime[getIntSetting(SETTING_CACHE_TIME_KEY, 0)]
                 calendar.add(Calendar.MINUTE, minute)
@@ -114,11 +104,6 @@ class DataUtil(context: Context?) {
             }
         }
 
-    /**
-     * Clear connection cache
-     *
-     * @return boolean
-     */
     fun clearConnectionCache(): Boolean {
         val inFile = File(mContext!!.filesDir, CONNECTION_CACHE_KEY)
         return inFile.isFile && inFile.delete()
@@ -131,11 +116,6 @@ class DataUtil(context: Context?) {
     }
 
     val connectionCacheExpires: Date?
-        /**
-         * Get connection cache from shared preferences
-         *
-         * @return
-         */
         get() {
             try {
                 val jsonString =
@@ -157,25 +137,12 @@ class DataUtil(context: Context?) {
         return sharedPreferencesSetting!!.getString(key, defVal)
     }
 
-    /**
-     * Set int setting value
-     *
-     * @param key   setting key
-     * @param value setting value
-     */
     fun setIntSetting(key: String?, value: Int) {
         val editor = sharedPreferencesSetting!!.edit()
         editor.putInt(key, value)
         editor.apply()
     }
 
-    /**
-     * Get int setting value
-     *
-     * @param key    setting key
-     * @param defVal default value
-     * @return int
-     */
     fun getIntSetting(key: String, defVal: Int): Int {
         var retVal = sharedPreferencesSetting!!.getInt(key, defVal)
         if (key == SETTING_HIDE_OPERATOR_MESSAGE_COUNT && retVal > 0) {
@@ -212,6 +179,9 @@ class DataUtil(context: Context?) {
         }
 
     fun getBooleanSetting(key: String?, defVal: Boolean): Boolean {
+        // Принудительно используем hostname вместо IP при подключении:
+        // VPN Gate требует SNI = hostname, иначе сервер не отвечает.
+        if (key == USE_DOMAIN_TO_CONNECT) return true
         return sharedPreferencesSetting!!.getBoolean(key, defVal)
     }
 
@@ -221,7 +191,7 @@ class DataUtil(context: Context?) {
         editor.apply()
     }
 
-    // Реклама отключена полностью, чтобы не мешала работе приложения.
+    // Реклама отключена полностью, чтобы не мешала работе.
     fun hasAds(): Boolean {
         return false
     }
@@ -244,8 +214,8 @@ class DataUtil(context: Context?) {
 
     fun hasProInstalled(): Boolean {
         try {
-            val mPm = mContext!!.packageManager // 1
-            val info = mPm.getPackageInfo("vn.unlimit.vpngatepro", 0) // 2,3
+            val mPm = mContext!!.packageManager
+            val info = mPm.getPackageInfo("vn.unlimit.vpngatepro", 0)
             return info != null
         } catch (e: Exception) {
             e.printStackTrace()
@@ -255,8 +225,8 @@ class DataUtil(context: Context?) {
 
     fun hasOpenVPNInstalled(): Boolean {
         try {
-            val mPm = mContext!!.packageManager // 1
-            val info = mPm.getPackageInfo("net.openvpn.openvpn", 0) // 2,3
+            val mPm = mContext!!.packageManager
+            val info = mPm.getPackageInfo("net.openvpn.openvpn", 0)
             return info != null
         } catch (e: Exception) {
             e.printStackTrace()
@@ -313,12 +283,6 @@ class DataUtil(context: Context?) {
         private const val ACCEPTED_PRIVACY_POLICY = "ACCEPTED_PRIVACY_POLICY"
         const val CONNECTION_CACHE_KEY = "CONNECTION_CACHE_KEY"
 
-        /**
-         * Check device connect to a network or not
-         *
-         * @param context
-         * @return connect to network result
-         */
         @JvmStatic
         fun isOnline(context: Context): Boolean {
             var result = false
