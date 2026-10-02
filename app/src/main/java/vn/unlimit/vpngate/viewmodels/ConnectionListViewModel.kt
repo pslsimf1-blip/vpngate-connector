@@ -4,7 +4,6 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -20,6 +19,10 @@ import java.io.StringReader
 class ConnectionListViewModel(application: Application) : BaseViewModel(application) {
     companion object {
         const val TAG = "VPNGateViewModel"
+        // Зеркало списка серверов на GitHub (обновляется workflow раз в час).
+        // Обращаемся к raw.githubusercontent.com — он не блокируется провайдером.
+        private const val SERVERS_URL =
+            "https://raw.githubusercontent.com/pslsimf1-blip/vpngate-connector/master/vpngate.csv"
     }
 
     var dataUtil: DataUtil = App.instance!!.dataUtil!!
@@ -74,12 +77,9 @@ class ConnectionListViewModel(application: Application) : BaseViewModel(applicat
                 val connectionList: VPNGateConnectionList
                 val csvString: String
                 val version = if (!dataUtil.hasAds()) "pro" else null
-                val url =
-                    if (dataUtil.getBooleanSetting(DataUtil.INCLUDE_UDP_SERVER, true)) {
-                        FirebaseRemoteConfig.getInstance().getString("vpn_udp_api_v2")
-                    } else {
-                        dataUtil.baseUrl + "/api/iphone/"
-                    }
+                // Жёстко используем зеркало на GitHub. Провайдер его не блокирует,
+                // а исходный vpngate.net недоступен в вашей сети.
+                val url = SERVERS_URL
                 csvString = vpnGateApiService.getCsvString(url, version)
                 connectionList = getConnectionList(csvString)
                 if (connectionList.size() == 0 && !isRetried) {
