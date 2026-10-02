@@ -10,6 +10,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Configure Git to use HTTPS for submodules
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -58,8 +62,6 @@ jobs:
 
       - name: Fix OpenSSL configuration.h
         run: |
-          # Создаём минимальный configuration.h — файл должен генерироваться при
-          # сборке OpenSSL, но в исходниках проекта его нет
           OPENSSL_INC="SoftEtherClient/src/main/cpp/openssl/include/openssl"
           cat > "$OPENSSL_INC/configuration.h" << 'EOF'
           #ifndef OSSL_CONFIGURATION_H
