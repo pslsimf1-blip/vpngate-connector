@@ -105,23 +105,38 @@ jobs:
           }
           EOF
 
-      - name: Create dummy release keystore
+      - name: Create dummy release keystore with both aliases
         run: |
           mkdir -p keyStore
+          # Алиас key0 для free-флейвора
           keytool -genkeypair -v \
             -keystore keyStore/release.jks \
             -storepass android \
             -keypass android \
-            -alias androiddebugkey \
+            -alias key0 \
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
+          # Алиас key_pro для pro-флейвора
+          keytool -genkeypair -v \
+            -keystore keyStore/release.jks \
+            -storepass android \
+            -keypass android \
+            -alias key_pro \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug Pro,O=Android,C=US"
+          # Проверка
+          keytool -list -keystore keyStore/release.jks -storepass android
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Build Debug APK
+        env:
+          SIGN_KEY_PASSWORD: android
         run: ./gradlew assembleDebug
 
       - name: Upload APK
